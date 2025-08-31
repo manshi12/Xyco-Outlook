@@ -56,7 +56,7 @@ SOCGEN_API_BASE = os.getenv("SOCGEN_API_BASE", "https://sogpt-hom.world.socgen:4
 SOCGEN_TOKEN_URL = os.getenv("SOCGEN_TOKEN_URL", "https://sgconnect-hom.fr.world.socgen/sgconnect/oauth2/access_token")
 SOCGEN_CLIENT_ID = os.getenv("SOCGEN_CLIENT_ID", "aa558c6b-adca-4cdd-b49d-125d9678c164")
 SOCGEN_CLIENT_SECRET = os.getenv("SOCGEN_CLIENT_SECRET", "k0lcckl4b7cj7ca8650cdl2naaj9")
-SOCGEN_MODEL = os.getenv("SOCGEN_MODEL", "azure-openai-gpt-40-mini-2024-07-18")
+SOCGEN_MODEL = os.getenv("SOCGEN_MODEL", "azure-openai-gpt-4o-mini-2024-07-18")
 
 STATE_FILE = ".processed_ids.json"
 PENDING_REVIEW_FILE = ".pending_review.json"
@@ -129,6 +129,7 @@ class SocGenAIClient:
         
         data = {
             'grant_type': 'client_credentials',
+            'scope':'api.group-06608.v1',
             'client_id': SOCGEN_CLIENT_ID,
             'client_secret': SOCGEN_CLIENT_SECRET
         }
@@ -179,14 +180,16 @@ class SocGenAIClient:
                 headers=headers,
                 json=payload,
                 timeout=60,
-                verify=False  # For corporate environments with self-signed certs
+                verify=True  # For corporate environments with self-signed certs
             )
             response.raise_for_status()
             
             result = response.json()
             
             # Extract content from SocGen API response format
-            if 'choices' in result and len(result['choices']) > 0:
+            if 'completion' in result:
+                content = result['completion']
+            elif 'choices' in result and len(result['choices']) > 0:
                 content = result['choices'][0].get('message', {}).get('content', '')
             elif 'content' in result:
                 content = result['content']
@@ -1181,4 +1184,5 @@ if __name__ == "__main__":
         save_state()
     except Exception as e:
         logging.error("Corporate agent crashed: %s", e)
+
         save_state()
