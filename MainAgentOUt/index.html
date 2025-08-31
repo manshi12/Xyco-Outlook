@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corporate Email Agent Dashboard - SocGen AI</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3a8a 0%, #3730a3 50%, #581c87 100%);
+            min-height: 100vh;
+        }
+        
+        .dashboard {
+            min-height: 100vh;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(15px);
+        }
+        
+        .navbar {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .navbar h1 {
+            color: white;
+            font-size: 1.5rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .corp-badge {
+            background: rgba(34, 197, 94, 0.2);
+            color: #86efac;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+        
+        .status-badge {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .status-running {
+            background: rgba(34, 197, 94, 0.2);
+            color: #16a34a;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+        
+        .status-stopped {
+            background: rgba(239, 68, 68, 0.2);
+            color: #dc2626;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        
+        .main-content {
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        .full-width {
+            grid-column: span 2;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        .card h2 {
+            color: white;
+            margin-bottom: 1rem;
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 1rem;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: all 0.2s;
+        }
+        
+        .stat-card:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-2px);
+        }
+        
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .stat-label {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.85rem;
+            margin-top: 0.25rem;
+        }
+        
+        .button {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .button:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-1px);
+        }
+        
+        .button-primary {
+            background: rgba(34, 197, 94, 0.25);
+            border-color: rgba(34, 197, 94, 0.4);
+        }
+        
+        .button-danger {
+            background: rgba(239, 68, 68, 0.25);
+            border-color: rgba(239, 68, 68, 0.4);
+        }
+        
+        .button-warning {
+            background: rgba(245, 158, 11, 0.25);
+            border-color: rgba(245, 158, 11, 0.4);
+        }
+        
+        .email-list {
+            max-height: 600px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .email-item {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 1rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: all 0.2s;
+        }
+        
+        .email-item:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateY(-1px);
+        }
+        
+        .email-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .email-from {
+            color: white;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .email-subject {
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 0.9rem;
+            margin: 0.25rem 0;
+            font-weight: 500;
+        }
+        
+        .email-meta {
+            display: flex;
+            gap: 0.5rem;
+            margin: 0.5rem 0;
+            flex-wrap: wrap;
+        }
+        
+        .tag {
+            padding: 0.25rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .tag-high { background: rgba(239, 68, 68, 0.3); color: #fca5a5; }
+        .tag-medium { background: rgba(245, 158, 11, 0.3); color: #fcd34d; }
+        .tag-low { background: rgba(107, 114, 128, 0.3); color: #d1d5db; }
+        .tag-urgent { background: rgba(245, 158, 11, 0.3); color: #fbbf24; }
+        .tag-business { background: rgba(59, 130, 246, 0.3); color: #93c5fd; }
+        .tag-meeting { background: rgba(168, 85, 247, 0.3); color: #c4b5fd; }
+        .tag-project { background: rgba(34, 197, 94, 0.3); color: #86efac; }
+        .tag-thread { background: rgba(249, 115, 22, 0.3); color: #fdba74; }
+        .tag-external { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+        .tag-vip { background: rgba(168, 85, 247, 0.3); color: #c4b5fd; }
+        
+        .connection-status {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .connection-item {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 0.75rem;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            flex: 1;
+            text-align: center;
+        }
+        
+        .connection-healthy {
+            border-color: rgba(34, 197, 94, 0.4);
+            background: rgba(34, 197, 94, 0.1);
+        }
+        
+        .connection-unhealthy {
+            border-color: rgba(239, 68, 68, 0.4);
+            background: rgba(239, 68, 68, 0.1);
+        }
+        
+        .thread-summary {
+            background: rgba(255, 255, 255, 0.05);
+            border-left: 4px solid rgba(249, 115, 22, 0.8);
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+        
+        .thread-summary h4 {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .thread-summary p {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+        
+        .action-items {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .action-items h5 {
+            color: #fcd34d;
+            font-size: 0.85rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .action-items ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .action-items li {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.8rem;
+            padding: 0.25rem 0;
+            padding-left: 1rem;
+            position: relative;
+        }
+        
+        .action-items li:before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #fcd34d;
+        }
+        
+        .email-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+            flex-wrap: wrap;
+        }
+        
+        .button-small {
+            padding: 0.5rem 1rem;
+            font-size: 0.8rem;
+        }
+        
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .input-group label {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .input-group input, .input-group select, .input-group textarea {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 6px;
+            padding: 0.5rem;
+            color: white;
+            font-size: 0.9rem;
+        }
+        
+        .input-group input::placeholder, .input-group textarea::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .chart-container {
+            height: 320px;
+            margin-top: 1rem;
+        }
+        
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 0.5rem;
+        }
+        
+        .details-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .details-section h5 {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.85rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        
+        .details-section p {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.85rem;
+            line-height: 1.4;
+            margin-bottom: 0.75rem;
+        }
+        
+        .proposed-reply {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .proposed-reply h5 {
+            color: #86efac;
+            font-size: 0.85rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .modify-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .corporate-header {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid rgba(34, 197, 94, 0.6);
+        }
+        
+        .api-status {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            font-size: 0.8rem;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        
+        .status-dot-green { background: #22c55e; }
+        .status-dot-red { background: #ef4444; }
+        .status-dot-yellow { background: #eab308; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const API_BASE = 'http://localhost:8000/api';
+
+        // Enhanced Icon components
+        const Play = ({ size = 24 }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+            </svg>
+        );
+
+        const Pause = ({ size = 24 }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="14" y="3" width="5" height="18" rx="1" />
+                <rect x="5" y="3" width="5" height="18" rx="1" />
+            </svg>
+        );
+
+        const RefreshCw = ({ size = 24 }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                <path d="M21 3v5h-5" />
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                <path d="M8 16H3v5" />
+            </svg>
+        );
+
+        const Settings = ({ size = 24 }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+                <circle cx="12" cy="12" r="3" />
+            </svg>
+        );
+
+        const Mail = ({ size = 24 }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" />
+                <rect x="2" y="4" width="20" height="16" rx="2" />
+            </svg>
+        );
+
+        const BarChart3 = ({ size = 24 }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 3v16a2 2 0 0 0 2 2h16" />
+                <path d="M18 17V9" />
+                <path d="M13 17V5" />
+                <path d="M8 17v-3" />
+            </svg>
+        );
+
+        const MessageSquare = ({ size = 24 }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+        );
+
+        const Building = ({ size = 24 }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="6" y="14" width="4" height="6" />
+                <rect x="14" y="14" width="4" height="6" />
+                <rect x="6" y="4" width="4" height="6" />
+                <rect x="14" y="4" width="4" height="6" />
+                <rect x="4" y="2" width="16" height="20" />
+            </svg>
+        );
+
+        // Enhanced API functions for corporate environment
+        const api = {
+            async getStatus() {
+                const res = await fetch(`${API_BASE}/status`);
+                return res.json();
+            },
+            async getSocGenStatus() {
+                const res = await fetch(`${API_BASE}/socgen-status`);
+                return res.json();
+            },
+            async getConfig() {
+                const res = await fetch(`${API_BASE}/config`);
+                return res.json();
+            },
+            async updateConfig(config) {
+                const res = await fetch(`${API_BASE}/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                return res.json();
+            },
+            async startAgent() {
+                const res = await fetch(`${API_BASE}/agent/start`, { method: 'POST' });
+                return res.json();
+            },
+            async stopAgent() {
+                const res = await fetch(`${API_BASE}/agent/stop`, { method: 'POST' });
+                return res.json();
+            },
+            async getPendingEmails() {
+                const res = await fetch(`${API_BASE}/emails/pending`);
+                return res.json();
+            },
+            async handlePendingEmail(emailId, action) {
+                const res = await fetch(`${API_BASE}/emails/pending/${emailId}/action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(action)
+                });
+                return res.json();
+            },
+            async getAnalytics() {
+                const res = await fetch(`${API_BASE}/analytics/stats`);
+                return res.json();
+            },
+            async runTestCycle() {
+                const res = await fetch(`${API_BASE}/agent/test-cycle`, { method: 'POST' });
+                return res.json();
+            },
+            async testSocGenConnection() {
+                const res = await fetch(`${API_BASE}/socgen/test-connection`, { method: 'POST' });
+                return res.json();
+            },
+            async testOutlookConnection() {
+                const res = await fetch(`${API_BASE}/outlook/test-connection`, { method: 'POST' });
+                return res.json();
+            },
+            async getCorporateHealth() {
+                const res = await fetch(`${API_BASE}/corporate/health`);
+                return res.json();
+            }
+        };
+
+        function CorporateDashboard() {
+            const [status, setStatus] = useState(null);
+            const [socgenStatus, setSocGenStatus] = useState(null);
+            const [config, setConfig] = useState(null);
+            const [pendingEmails, setPendingEmails] = useState([]);
+            const [analytics, setAnalytics] = useState(null);
+            const [corporateHealth, setCorporateHealth] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const chartRef = useRef(null);
+
+            const loadData = async () => {
+                try {
+                    const [statusData, socgenData, configData, pendingData, analyticsData, healthData] = await Promise.all([
+                        api.getStatus(),
+                        api.getSocGenStatus(),
+                        api.getConfig(),
+                        api.getPendingEmails(),
+                        api.getAnalytics(),
+                        api.getCorporateHealth()
+                    ]);
+                    setStatus(statusData);
+                    setSocGenStatus(socgenData);
+                    setConfig(configData);
+                    setPendingEmails(pendingData);
+                    setAnalytics(analyticsData);
+                    setCorporateHealth(healthData);
+                } catch (error) {
+                    console.error('Failed to load corporate data:', error);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            useEffect(() => {
+                loadData();
+                const interval = setInterval(loadData, 5000);
+                return () => clearInterval(interval);
+            }, []);
+
+            useEffect(() => {
+                if (analytics && chartRef.current) {
+                    const ctx = chartRef.current.getContext('2d');
+                    
+                    if (window.emailChart) {
+                        window.emailChart.destroy();
+                    }
+
+                    window.emailChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+                            datasets: [
+                                {
+                                    label: 'Corporate Emails Processed',
+                                    data: analytics.by_hour || Array(24).fill(0),
+                                    borderColor: 'rgba(34, 197, 94, 0.8)',
+                                    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                                    tension: 0.4
+                                },
+                                {
+                                    label: 'Thread Replies',
+                                    data: analytics.by_hour?.map(h => Math.floor(h * 0.6)) || Array(24).fill(0),
+                                    borderColor: 'rgba(249, 115, 22, 0.8)',
+                                    backgroundColor: 'rgba(249, 115, 22, 0.2)',
+                                    tension: 0.4
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                                    ticks: { color: 'rgba(255, 255, 255, 0.8)' }
+                                },
+                                x: {
+                                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                                    ticks: { color: 'rgba(255, 255, 255, 0.8)' }
+                                }
+                            },
+                            plugins: {
+                                legend: { labels: { color: 'rgba(255, 255, 255, 0.9)' } }
+                            }
+                        }
+                    });
+                }
+            }, [analytics]);
+
+            const handleAgentToggle = async () => {
+                try {
+                    if (status?.is_running) {
+                        await api.stopAgent();
+                    } else {
+                        await api.startAgent();
+                    }
+                    loadData();
+                } catch (error) {
+                    console.error('Failed to toggle corporate agent:', error);
+                }
+            };
+
+            const handlePendingAction = async (emailId, action) => {
+                try {
+                    await api.handlePendingEmail(emailId, action);
+                    loadData();
+                } catch (error) {
+                    console.error('Failed to handle corporate email action:', error);
+                }
+            };
+
+            const handleTestConnections = async () => {
+                try {
+                    const [socgenTest, outlookTest] = await Promise.all([
+                        api.testSocGenConnection(),
+                        api.testOutlookConnection()
+                    ]);
+                    
+                    alert(`Connection Tests:\nSocGen AI: ${socgenTest.success ? 'Success' : 'Failed'}\nOutlook: ${outlookTest.success ? 'Success' : 'Failed'}`);
+                    loadData();
+                } catch (error) {
+                    console.error('Failed to test connections:', error);
+                }
+            };
+
+            if (loading) {
+                return (
+                    <div className="dashboard">
+                        <div className="loading">
+                            <div className="spinner"></div>
+                            Loading corporate dashboard...
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="dashboard">
+                    <nav className="navbar">
+                        <div>
+                            <h1>
+                                <Building size={24} />
+                                Corporate Email Agent
+                                <span className="corp-badge">SocGen AI</span>
+                            </h1>
+                        </div>
+                        <div style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
+                            <div className="api-status">
+                                <span className={`status-dot ${socgenStatus?.connected ? 'status-dot-green' : 'status-dot-red'}`}></span>
+                                SocGen AI
+                            </div>
+                            <div className="api-status">
+                                <span className={`status-dot ${corporateHealth?.outlook?.healthy ? 'status-dot-green' : 'status-dot-red'}`}></span>
+                                Outlook
+                            </div>
+                            <div className={`status-badge ${status?.is_running ? 'status-running' : 'status-stopped'}`}>
+                                {status?.is_running ? <Play size={16} /> : <Pause size={16} />}
+                                {status?.is_running ? 'Running' : 'Stopped'}
+                            </div>
+                        </div>
+                    </nav>
+
+                    <div className="main-content">
+                        {/* Corporate System Health */}
+                        <div className="card full-width">
+                            <h2><Building size={20} />Corporate System Health</h2>
+                            <div className="connection-status">
+                                <div className={`connection-item ${socgenStatus?.connected ? 'connection-healthy' : 'connection-unhealthy'}`}>
+                                    <div style={{fontWeight: '600', color: 'white', marginBottom: '0.25rem'}}>SocGen AI</div>
+                                    <div style={{fontSize: '0.8rem', color: 'rgba(255,255,255,0.8)'}}>
+                                        {socgenStatus?.connected ? 'Connected' : 'Disconnected'}
+                                    </div>
+                                    <div style={{fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)'}}>
+                                        {socgenStatus?.model || 'N/A'}
+                                    </div>
+                                </div>
+                                <div className={`connection-item ${corporateHealth?.outlook?.healthy ? 'connection-healthy' : 'connection-unhealthy'}`}>
+                                    <div style={{fontWeight: '600', color: 'white', marginBottom: '0.25rem'}}>Corporate Outlook</div>
+                                    <div style={{fontSize: '0.8rem', color: 'rgba(255,255,255,0.8)'}}>
+                                        {corporateHealth?.outlook?.healthy ? 'Connected' : 'Disconnected'}
+                                    </div>
+                                    <div style={{fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)'}}>
+                                        {corporateHealth?.outlook?.imap_host || 'N/A'}
+                                    </div>
+                                </div>
+                                <div className="connection-item connection-healthy">
+                                    <div style={{fontWeight: '600', color: 'white', marginBottom: '0.25rem'}}>Thread Processing</div>
+                                    <div style={{fontSize: '0.8rem', color: 'rgba(255,255,255,0.8)'}}>
+                                        Active
+                                    </div>
+                                    <div style={{fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)'}}>
+                                        Context Aware
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Enhanced Corporate Statistics */}
+                        <div className="card full-width">
+                            <h2><BarChart3 size={20} />Corporate Email Analytics</h2>
+                            <div className="stats-grid">
+                                <div className="stat-card">
+                                    <div className="stat-value">{analytics?.processed_today || 0}</div>
+                                    <div className="stat-label">Processed Today</div>
+                                </div>
+                                <div className="stat-card">
+                                    <div className="stat-value">{analytics?.sent_today || 0}</div>
+                                    <div className="stat-label">Sent Today</div>
+                                </div>
+                                <div className="stat-card">
+                                    <div className="stat-value">{analytics?.thread_replies_processed || 0}</div>
+                                    <div className="stat-label">Thread Replies</div>
+                                </div>
+                                <div className="stat-card">
+                                    <div className="stat-value">{analytics?.pending_count || 0}</div>
+                                    <div className="stat-label">Pending Review</div>
+                                </div>
+                                <div className="stat-card">
+                                    <div className="stat-value">{analytics?.success_rate?.toFixed(1) || 0}%</div>
+                                    <div className="stat-label">Success Rate</div>
+                                </div>
+                                <div className="stat-card">
+                                    <div className="stat-value">{analytics?.corporate_metrics?.external_email_percentage?.toFixed(1) || 0}%</div>
+                                    <div className="stat-label">External Emails</div>
+                                </div>
+                                <div className="stat-card">
+                                    <div className="stat-value">{analytics?.corporate_metrics?.high_priority_percentage?.toFixed(1) || 0}%</div>
+                                    <div className="stat-label">High Priority</div>
+                                </div>
+                                <div className="stat-card">
+                                    <div className="stat-value">{analytics?.corporate_metrics?.compliance_score?.toFixed(1) || 0}%</div>
+                                    <div className="stat-label">Compliance Score</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Corporate Agent Controls */}
+                        <div className="card">
+                            <h2><Settings size={20} />Corporate Agent Controls</h2>
+                            <div style={{display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap'}}>
+                                <button 
+                                    className={`button ${status?.is_running ? 'button-danger' : 'button-primary'}`}
+                                    onClick={handleAgentToggle}
+                                >
+                                    {status?.is_running ? <Pause size={16} /> : <Play size={16} />}
+                                    {status?.is_running ? 'Stop Agent' : 'Start Agent'}
+                                </button>
+                                <button className="button" onClick={() => api.runTestCycle()}>
+                                    <RefreshCw size={16} />
+                                    Test Cycle
+                                </button>
+                                <button className="button button-warning" onClick={handleTestConnections}>
+                                    Test Connections
+                                </button>
+                            </div>
+                            <div className="controls-grid">
+                                <div className="input-group">
+                                    <label>Poll Interval (seconds)</label>
+                                    <input 
+                                        type="number" 
+                                        value={config?.poll_seconds || 60}
+                                        onChange={(e) => setConfig({...config, poll_seconds: parseInt(e.target.value)})}
+                                    />
+                                </div>
+                                <div className="input-group">
+                                    <label>Max Emails per Cycle</label>
+                                    <input 
+                                        type="number" 
+                                        value={config?.max_emails_per_cycle || 10}
+                                        onChange={(e) => setConfig({...config, max_emails_per_cycle: parseInt(e.target.value)})}
+                                    />
+                                </div>
+                                <div className="input-group">
+                                    <label>Dry Run Mode</label>
+                                    <select 
+                                        value={config?.dry_run ? 'true' : 'false'}
+                                        onChange={(e) => setConfig({...config, dry_run: e.target.value === 'true'})}
+                                    >
+                                        <option value="true">Enabled (Testing)</option>
+                                        <option value="false">Disabled (Live)</option>
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <label>Company Domain</label>
+                                    <input 
+                                        type="text" 
+                                        value={config?.company_domain || ''}
+                                        onChange={(e) => setConfig({...config, company_domain: e.target.value})}
+                                        placeholder="yourcompany.com"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Corporate Email Processing Chart */}
+                        <div className="card">
+                            <h2><BarChart3 size={20} />Email Processing (24h)</h2>
+                            <div className="chart-container">
+                                <canvas ref={chartRef}></canvas>
+                            </div>
+                        </div>
+
+                        {/* Enhanced Corporate Pending Emails */}
+                        <div className="card full-width">
+                            <h2><Mail size={20} />Corporate Emails Pending Review ({pendingEmails.length})</h2>
+                            {pendingEmails.length === 0 ? (
+                                <div style={{textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.6)'}}>
+                                    No corporate emails pending review
+                                </div>
+                            ) : (
+                                <div className="email-list">
+                                    {pendingEmails.map((email) => (
+                                        <CorporateEmailItem 
+                                            key={email.id} 
+                                            email={email} 
+                                            onAction={(action) => handlePendingAction(email.id, action)}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function CorporateEmailItem({ email, onAction }) {
+            const [showDetails, setShowDetails] = useState(false);
+            const [modifyMode, setModifyMode] = useState(false);
+            const [replySubject, setReplySubject] = useState(email.ai_decision?.proposed_subject || '');
+            const [replyBody, setReplyBody] = useState(email.ai_decision?.proposed_body || '');
+
+            const handleModify = () => {
+                onAction({
+                    action: 'modify',
+                    reply_subject: replySubject,
+                    reply_body: replyBody,
+                    maintain_thread: true
+                });
+                setModifyMode(false);
+            };
+
+            const isExternal = email.from_addr && !email.from_addr.includes(email.ai_decision?.company_domain || '');
+
+            return (
+                <div className="email-item">
+                    <div className="email-header">
+                        <div style={{flex: 1}}>
+                            <div className="email-from">
+                                {email.from_addr}
+                                {isExternal && <span className="tag tag-external" style={{marginLeft: '0.5rem'}}>External</span>}
+                            </div>
+                            <div className="email-subject">{email.subject}</div>
+                            <div className="email-meta">
+                                <span className={`tag tag-${email.importance}`}>{email.importance.toUpperCase()}</span>
+                                <span className={`tag tag-${email.category}`}>{email.category}</span>
+                                <span className={`tag tag-${email.business_priority}`}>Priority: {email.business_priority}</span>
+                                {email.is_thread_reply && <span className="tag tag-thread">Thread Reply</span>}
+                                {email.thread_context_used && <span className="tag tag-thread">Context Used</span>}
+                            </div>
+                            <div style={{color: 'rgba(255,255,255,0.7)', fontSize: '0.8rem'}}>
+                                Corporate Review Reason: {email.reason}
+                            </div>
+                        </div>
+                        <div>
+                            <button 
+                                className="button button-small" 
+                                onClick={() => setShowDetails(!showDetails)}
+                            >
+                                {showDetails ? 'Hide' : 'Details'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Corporate Thread Summary Display */}
+                    {email.thread_summary && email.thread_summary.trim() && (
+                        <div className="thread-summary">
+                            <h4><MessageSquare size={16} />Corporate Thread Context</h4>
+                            <p>{email.thread_summary}</p>
+                        </div>
+                    )}
+
+                    {/* Corporate Action Items Display */}
+                    {email.action_items && email.action_items.length > 0 && (
+                        <div className="action-items">
+                            <h5>Action Items Detected:</h5>
+                            <ul>
+                                {email.action_items.map((item, index) => (
+                                    <li key={index}>{item}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    {showDetails && (
+                        <div className="details-section">
+                            <div style={{marginBottom: '1rem'}}>
+                                <h5>Corporate Email Preview:</h5>
+                                <p>{email.body_preview}</p>
+                            </div>
+                            
+                            <div style={{marginBottom: '1rem'}}>
+                                <h5>SocGen AI Analysis:</h5>
+                                <p>Confidence: {(email.ai_decision?.confidence * 100)?.toFixed(1) || 0}%</p>
+                                <p>Business Priority: {email.business_priority}</p>
+                                <p>Requires Action: {email.ai_decision?.requires_action ? 'Yes' : 'No'}</p>
+                            </div>
+                            
+                            {modifyMode ? (
+                                <div className="modify-form">
+                                    <div className="input-group">
+                                        <label>Corporate Reply Subject:</label>
+                                        <input 
+                                            type="text"
+                                            value={replySubject}
+                                            onChange={(e) => setReplySubject(e.target.value)}
+                                            placeholder="Enter corporate reply subject..."
+                                        />
+                                    </div>
+                                    <div className="input-group">
+                                        <label>Corporate Reply Body:</label>
+                                        <textarea 
+                                            value={replyBody}
+                                            onChange={(e) => setReplyBody(e.target.value)}
+                                            rows={8}
+                                            placeholder="Enter your professional corporate reply message..."
+                                        />
+                                    </div>
+                                    <div style={{display: 'flex', gap: '0.5rem'}}>
+                                        <button className="button button-primary button-small" onClick={handleModify}>
+                                            Send Corporate Reply
+                                        </button>
+                                        <button className="button button-small" onClick={() => setModifyMode(false)}>
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="proposed-reply">
+                                    <h5>SocGen AI Proposed Corporate Reply:</h5>
+                                    <div style={{marginBottom: '0.5rem'}}>
+                                        <strong>Subject:</strong> {email.ai_decision?.proposed_subject || 'No subject proposed'}
+                                    </div>
+                                    <div style={{whiteSpace: 'pre-wrap', fontSize: '0.85rem'}}>
+                                        {email.ai_decision?.proposed_body || 'No body proposed'}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {!modifyMode && (
+                        <div className="email-actions">
+                            <button 
+                                className="button button-primary button-small"
+                                onClick={() => onAction({action: 'approve', maintain_thread: true})}
+                            >
+                                Approve & Send
+                            </button>
+                            <button 
+                                className="button button-small"
+                                onClick={() => setModifyMode(true)}
+                            >
+                                Modify Reply
+                            </button>
+                            <button 
+                                className="button button-danger button-small"
+                                onClick={() => onAction({action: 'reject'})}
+                            >
+                                Reject
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.render(<CorporateDashboard />, document.getElementById('root'));
+    </script>
+</body>
+</html>
