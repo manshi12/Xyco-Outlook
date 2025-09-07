@@ -324,6 +324,7 @@ class SocGenAIClient:
         
         data = {
             'grant_type': 'client_credentials',
+            'scope':'api.group-06608.v1', #new added
             'client_id': SOCGEN_CLIENT_ID,
             'client_secret': SOCGEN_CLIENT_SECRET
         }
@@ -374,14 +375,16 @@ class SocGenAIClient:
                 headers=headers,
                 json=payload,
                 timeout=60,
-                verify=False  # For corporate environments with self-signed certs
+                verify=True  # For corporate environments with self-signed certs
             )
             response.raise_for_status()
             
             result = response.json()
             
             # Extract content from SocGen API response format
-            if 'choices' in result and len(result['choices']) > 0:
+            if 'completion' in result: #new added
+                content = result['completion']
+            elif 'choices' in result and len(result['choices']) > 0:
                 content = result['choices'][0].get('message', {}).get('content', '')
             elif 'content' in result:
                 content = result['content']
@@ -824,7 +827,8 @@ def summarize_thread(thread_context: List[Dict]) -> str:
     
     if len(thread_text) > 4000:
         thread_text = thread_text[-4000:]
-    
+
+
     summary_prompt = (
         "You are a corporate email thread summary assistant. Summarize this email conversation history in 2-4 sentences. "
         "Focus on: 1) What the business conversation is about, 2) Key decisions or requests made, "
@@ -987,6 +991,8 @@ Be professional, contextually aware, and ensure replies maintain corporate threa
             "business_priority": "medium",
             "action_items": []
         }
+
+
 
 # -----------------------
 # Enhanced SMTP with Corporate Outlook Support
