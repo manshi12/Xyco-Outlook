@@ -18,6 +18,7 @@ import imaplib
 import smtplib
 # Import your enhanced corporate agent
 import mvp_agent as mvp_agent
+import ssl
 
 # Enhanced Pydantic Models for Corporate Environment
 class EmailSummary(BaseModel):
@@ -517,43 +518,61 @@ async def test_socgen_connection():
 
 @app.post("/api/outlook/test-connection")
 async def test_outlook_connection():
-    """Test corporate Outlook connection"""
+    """Test corporate Outlook/Exchange connection with enhanced discovery"""
     try:
-        # Test IMAP
-        import ssl
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
+        # Use the enhanced connection testing
+        success = mvp_agent.test_corporate_connections()
         
-        imap = imaplib.IMAP4_SSL(mvp_agent.IMAP_HOST, mvp_agent.IMAP_PORT, ssl_context=context)
-        imap.login(mvp_agent.EMAIL_USER, mvp_agent.EMAIL_PASS)
-        imap.select("INBOX")
-        _, data = imap.search(None, "(ALL)")
-        total_emails = len(data[0].split()) if data and data[0] else 0
-        imap.close()
-        imap.logout()
-        
-        # Test SMTP
-        with smtplib.SMTP(mvp_agent.SMTP_HOST, mvp_agent.SMTP_PORT) as s:
-            if mvp_agent.SMTP_STARTTLS:
-                s.starttls(context=ssl.create_default_context())
-            s.login(mvp_agent.EMAIL_USER, mvp_agent.EMAIL_PASS)
-        
-        return {
-            "success": True,
-            "message": "Corporate Outlook connection successful",
-            "total_emails": total_emails,
-            "imap_host": mvp_agent.IMAP_HOST,
-            "smtp_host": mvp_agent.SMTP_HOST
-        }
+        if success:
+            # Get final server settings after discovery
+            imap_host = mvp_agent.IMAP_HOST
+            smtp_host = mvp_agent.SMTP_HOST
+            
+            # Get email count
+            try:
+                context = ssl.create_default_context()
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
+                
+                imap = imaplib.IMAP4_SSL(imap_host, mvp_agent.IMAP_PORT, ssl_context=context)
+                imap.login(mvp_agent.EMAIL_USER, mvp_agent.EMAIL_PASS)
+                imap.select("INBOX")
+                _, data = imap.search(None, "(ALL)")
+                total_emails = len(data[0].split()) if data and data[0] else 0
+                imap.close()
+                imap.logout()
+            except:
+                total_emails = 0
+            
+            return {
+                "success": True,
+                "message": "Corporate Exchange connection successful",
+                "total_emails": total_emails,
+                "imap_host": imap_host,
+                "smtp_host": smtp_host,
+                "discovered": imap_host != "outlook.office365.com"  # Shows if auto-discovery worked
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Corporate Exchange connection failed - check server settings",
+                "total_emails": 0,
+                "imap_host": mvp_agent.IMAP_HOST,
+                "smtp_host": mvp_agent.SMTP_HOST,
+                "discovered": False
+            }
+            
     except Exception as e:
         return {
             "success": False,
-            "message": f"Corporate Outlook connection failed: {str(e)}",
+            "message": f"Corporate Exchange connection failed: {str(e)}",
             "total_emails": 0,
             "imap_host": mvp_agent.IMAP_HOST,
-            "smtp_host": mvp_agent.SMTP_HOST
+            "smtp_host": mvp_agent.SMTP_HOST,
+            "discovered": False
         }
+    
+
 
 @app.get("/api/corporate/health")
 async def get_corporate_health():
