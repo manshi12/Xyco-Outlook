@@ -19,6 +19,11 @@ from datetime import datetime, timedelta
 import platform
 import subprocess
 import base64
+import socket
+
+
+
+
 
 # Optional .env loading
 try:
@@ -65,6 +70,196 @@ TOKEN_FILE = ".socgen_token.json"
 assert EMAIL_ADDRESS and EMAIL_USER and EMAIL_PASS, "Email credentials missing"
 assert IMAP_HOST and SMTP_HOST, "IMAP/SMTP host configuration missing"
 assert SOCGEN_CLIENT_ID and SOCGEN_CLIENT_SECRET, "SocGen API credentials missing"
+
+
+
+def detect_exchange_server(email_domain: str) -> Optional[str]:
+    """Auto-detect Exchange server settings using DNS SRV records"""
+    try:
+        # Try to resolve SRV records for Exchange autodiscovery
+        srv_queries = [
+            f"_imaps._tcp.{email_domain}",
+            f"_imap._tcp.{email_domain}",
+            f"_autodiscover._tcp.{email_domain}"
+        ]
+        
+        import dns.resolver
+        for query in srv_queries:
+            try:
+                answers = dns.resolver.resolve(query, 'SRV')
+                for answer in answers:
+                    return str(answer.target).rstrip('.')
+            except:
+                continue
+    except ImportError:
+        logging.debug("dnspython not available for SRV lookup")
+    except Exception as e:
+        logging.debug(f"SRV lookup failed: {e}")
+    
+    return None
+
+def get_exchange_autodiscover_url(email_address: str) -> Optional[str]:
+    """Try Exchange autodiscovery to find server settings"""
+    domain = email_address.split('@')[1] if '@' in email_address else None
+    if not domain:
+        return None
+    
+    autodiscover_urls = [
+        f"https://autodiscover.{domain}/autodiscover/autodiscover.xml",
+        f"https://{domain}/autodiscover/autodiscover.xml",
+        f"http://autodiscover.{domain}/autodiscover/autodiscover.xml"
+    ]
+    
+    autodiscover_xml = f"""<?xml version="1.0" encoding="utf-8"?>
+    <Autodiscover xmlns="http://schemas.microsoft.com/exchange/autodiscover/outlook/requestschema/2006">
+        <Request>
+            <EMailAddress>{email_address}</EMailAddress>
+            <AcceptableResponseSchema>http://schemas.microsoft.com/exchange/autodiscover/outlook/responseschema/2006a</AcceptableResponseSchema>
+        </Request>
+    </Autodiscover>"""
+    
+    for url in autodiscover_urls:
+        try:
+            import requests
+            response = requests.post(
+                url, 
+                data=autodiscover_xml,
+                headers={'Content-Type': 'text/xml; charset=utf-8'},
+                timeout=10,
+                verify=False  # Corporate environments often use self-signed certs
+            )
+            
+            if response.status_code == 200:
+                # Parse the XML response to extract IMAP server
+                import xml.etree.ElementTree as ET
+                root = ET.fromstring(response.text)
+                
+                # Look for IMAP protocol settings
+                for protocol in root.iter():
+                    if protocol.tag and 'Protocol' in protocol.tag:
+                        type_elem = protocol.find('.//{*}Type')
+                        server_elem = protocol.find('.//{*}Server')
+                        port_elem = protocol.find('.//{*}Port')
+                        
+                        if (type_elem is not None and type_elem.text == 'IMAP' and 
+                            server_elem is not None):
+                            return server_elem.text
+                            
+        except Exception as e:
+            logging.debug(f"Autodiscover attempt failed for {url}: {e}")
+            continue
+    
+    return None
+
+def discover_corporate_settings(email_address: str) -> dict:
+    """Discover corporate Exchange server settings"""
+    domain = email_address.split('@')[1] if '@' in email_address else ""
+    
+    # Try common corporate Exchange patterns
+    common_patterns = [
+        f"mail.{domain}",
+        f"exchange.{domain}",
+        f"imap.{domain}",
+        f"outlook.{domain}",
+        f"mx.{domain}",
+        f"webmail.{domain}"
+    ]
+    
+    # Try SRV record discovery
+    srv_server = detect_exchange_server(domain)
+    if srv_server:
+        common_patterns.insert(0, srv_server)
+    
+    # Try autodiscovery
+    autodiscover_server = get_exchange_autodiscover_url(email_address)
+    if autodiscover_server:
+        common_patterns.insert(0, autodiscover_server)
+    
+    settings = {
+        'imap_host': None,
+        'imap_port': 993,
+        'smtp_host': None,
+        'smtp_port': 587
+    }
+    
+    # Test each pattern
+    for pattern in common_patterns:
+        if test_imap_connection(pattern, 993, EMAIL_USER, EMAIL_PASS):
+            settings['imap_host'] = pattern
+            break
+    
+    # Test SMTP with same pattern
+    if settings['imap_host']:
+        smtp_pattern = settings['imap_host'].replace('imap', 'smtp').replace('mail', 'smtp')
+        if test_smtp_connection(smtp_pattern, 587, EMAIL_USER, EMAIL_PASS):
+            settings['smtp_host'] = smtp_pattern
+        elif test_smtp_connection(settings['imap_host'], 587, EMAIL_USER, EMAIL_PASS):
+            settings['smtp_host'] = settings['imap_host']
+    
+    return settings
+
+def test_imap_connection(host: str, port: int, username: str, password: str, timeout: int = 10) -> bool:
+    """Test IMAP connection with enhanced error handling for corporate environments"""
+    try:
+        # Create SSL context for corporate environments
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE  # For self-signed corporate certs
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        
+        # Set socket timeout
+        socket.setdefaulttimeout(timeout)
+        
+        # Try IMAP SSL connection
+        imap = imaplib.IMAP4_SSL(host, port, ssl_context=context)
+        imap.login(username, password)
+        imap.select("INBOX")
+        imap.close()
+        imap.logout()
+        
+        logging.info(f"IMAP connection successful: {host}:{port}")
+        return True
+        
+    except socket.gaierror as e:
+        logging.debug(f"DNS resolution failed for {host}: {e}")
+        return False
+    except socket.timeout:
+        logging.debug(f"Connection timeout for {host}:{port}")
+        return False
+    except imaplib.IMAP4.error as e:
+        logging.debug(f"IMAP authentication failed for {host}: {e}")
+        return False
+    except Exception as e:
+        logging.debug(f"IMAP connection failed for {host}: {e}")
+        return False
+    finally:
+        socket.setdefaulttimeout(None)
+
+def test_smtp_connection(host: str, port: int, username: str, password: str, timeout: int = 10) -> bool:
+    """Test SMTP connection with enhanced error handling"""
+    try:
+        socket.setdefaulttimeout(timeout)
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        
+        with smtplib.SMTP(host, port, timeout=timeout) as s:
+            s.starttls(context=context)
+            s.login(username, password)
+        
+        logging.info(f"SMTP connection successful: {host}:{port}")
+        return True
+        
+    except socket.gaierror as e:
+        logging.debug(f"DNS resolution failed for {host}: {e}")
+        return False
+    except Exception as e:
+        logging.debug(f"SMTP connection failed for {host}: {e}")
+        return False
+    finally:
+        socket.setdefaulttimeout(None)
+
+
 
 # -----------------------
 # SocGen AI API Client
@@ -129,7 +324,6 @@ class SocGenAIClient:
         
         data = {
             'grant_type': 'client_credentials',
-            'scope':'api.group-06608.v1',
             'client_id': SOCGEN_CLIENT_ID,
             'client_secret': SOCGEN_CLIENT_SECRET
         }
@@ -180,16 +374,14 @@ class SocGenAIClient:
                 headers=headers,
                 json=payload,
                 timeout=60,
-                verify=True  # For corporate environments with self-signed certs
+                verify=False  # For corporate environments with self-signed certs
             )
             response.raise_for_status()
             
             result = response.json()
             
             # Extract content from SocGen API response format
-            if 'completion' in result:
-                content = result['completion']
-            elif 'choices' in result and len(result['choices']) > 0:
+            if 'choices' in result and len(result['choices']) > 0:
                 content = result['choices'][0].get('message', {}).get('content', '')
             elif 'content' in result:
                 content = result['content']
@@ -799,8 +991,40 @@ Be professional, contextually aware, and ensure replies maintain corporate threa
 # -----------------------
 # Enhanced SMTP with Corporate Outlook Support
 # -----------------------
+# def smtp_send(to_addr: str, subject: str, body: str, headers: dict = None):
+#     """Send email via SMTP with proper headers (Corporate Outlook optimized)"""
+#     msg = EmailMessage()
+#     msg["From"] = EMAIL_ADDRESS
+#     msg["To"] = to_addr
+#     msg["Subject"] = subject
+#     msg["Date"] = email.utils.formatdate(localtime=True)
+    
+#     # Add custom Message-ID for better tracking
+#     msg["Message-ID"] = email.utils.make_msgid(domain=EMAIL_ADDRESS.split('@')[1])
+    
+#     # Add threading headers with cleaning
+#     for k, v in (headers or {}).items():
+#         if v:
+#             clean_value = clean_header(str(v))
+#             msg[k] = clean_value
+#             logging.info(f"Added header {k}: {clean_value[:50]}...")
+    
+#     # Add corporate-specific headers
+#     msg["X-Mailer"] = "Corporate Email Agent v2.0"
+#     msg["X-Priority"] = "3"  # Normal priority
+    
+#     msg.set_content(body)
+
+#     context = ssl.create_default_context()
+#     with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+#         if SMTP_STARTTLS:
+#             s.starttls(context=context)
+#         s.login(EMAIL_USER, EMAIL_PASS)
+#         s.send_message(msg)
+
+
 def smtp_send(to_addr: str, subject: str, body: str, headers: dict = None):
-    """Send email via SMTP with proper headers (Corporate Outlook optimized)"""
+    """Enhanced SMTP send with corporate Exchange support"""
     msg = EmailMessage()
     msg["From"] = EMAIL_ADDRESS
     msg["To"] = to_addr
@@ -823,12 +1047,26 @@ def smtp_send(to_addr: str, subject: str, body: str, headers: dict = None):
     
     msg.set_content(body)
 
+    # Enhanced SSL context for corporate Exchange
     context = ssl.create_default_context()
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-        if SMTP_STARTTLS:
-            s.starttls(context=context)
-        s.login(EMAIL_USER, EMAIL_PASS)
-        s.send_message(msg)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    
+    try:
+        context.minimum_version = ssl.TLSVersion.TLSv1
+    except:
+        pass
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as s:
+            if SMTP_STARTTLS:
+                s.starttls(context=context)
+            s.login(EMAIL_USER, EMAIL_PASS)
+            s.send_message(msg)
+    except Exception as e:
+        logging.error(f"SMTP send failed: {e}")
+        raise
 
 # -----------------------
 # Enhanced Message Processing (Corporate)
@@ -1015,16 +1253,100 @@ def process_one_message(msg: email.message.Message):
 # -----------------------
 # IMAP Functions (Corporate Outlook Optimized)
 # -----------------------
+# def imap_fetch_unseen(limit=10) -> List[email.message.Message]:
+#     """Fetch unread emails from corporate Outlook, prioritizing high importance"""
+#     try:
+#         # Enhanced SSL context for corporate environments
+#         context = ssl.create_default_context()
+#         context.check_hostname = False
+#         context.verify_mode = ssl.CERT_NONE  # For corporate self-signed certs
+        
+#         imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, ssl_context=context)
+#         imap.login(EMAIL_USER, EMAIL_PASS)
+#         imap.select("INBOX")
+        
+#         try:
+#             # Search for high importance emails first
+#             _, high_data = imap.search(None, "(UNSEEN HEADER Importance high)")
+#             _, normal_data = imap.search(None, "(UNSEEN NOT HEADER Importance high)")
+            
+#             high_ids = high_data[0].split() if high_data and high_data[0] else []
+#             normal_ids = normal_data[0].split() if normal_data and normal_data[0] else []
+            
+#             ids = (high_ids + normal_ids)[:limit]
+#         except:
+#             _, data = imap.search(None, "(UNSEEN)")
+#             ids = (data[0].split() if data and data[0] else [])[:limit]
+        
+#         messages = []
+#         for num in ids:
+#             try:
+#                 _, msg_data = imap.fetch(num, "(RFC822)")
+#                 if not msg_data:
+#                     continue
+#                 raw = msg_data[0][1]
+#                 messages.append(email.message_from_bytes(raw))
+#             except Exception as e:
+#                 logging.error(f"Failed to fetch message {num}: {e}")
+#                 continue
+        
+#         imap.close()
+#         imap.logout()
+#         return messages
+        
+#     except Exception as e:
+#         logging.error(f"Corporate IMAP fetch error: {e}")
+#         return []
+
 def imap_fetch_unseen(limit=10) -> List[email.message.Message]:
-    """Fetch unread emails from corporate Outlook, prioritizing high importance"""
+    """Enhanced IMAP fetch with corporate Exchange support and auto-discovery"""
+    global IMAP_HOST, IMAP_PORT, SMTP_HOST, SMTP_PORT
+    
+    # Auto-discover if using default Office 365 settings in corporate environment
+    if IMAP_HOST == "outlook.office365.com" and EMAIL_ADDRESS:
+        logging.info("Detecting corporate Exchange server settings...")
+        
+        discovered = discover_corporate_settings(EMAIL_ADDRESS)
+        if discovered['imap_host']:
+            IMAP_HOST = discovered['imap_host']
+            IMAP_PORT = discovered['imap_port']
+            if discovered['smtp_host']:
+                SMTP_HOST = discovered['smtp_host']
+                SMTP_PORT = discovered['smtp_port']
+            
+            logging.info(f"Discovered corporate settings - IMAP: {IMAP_HOST}:{IMAP_PORT}, SMTP: {SMTP_HOST}:{SMTP_PORT}")
+        else:
+            logging.error("Could not discover corporate Exchange settings. Please configure manually.")
+            return []
+    
     try:
         # Enhanced SSL context for corporate environments
         context = ssl.create_default_context()
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE  # For corporate self-signed certs
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        
+        # Add support for legacy SSL/TLS versions if needed
+        try:
+            context.minimum_version = ssl.TLSVersion.TLSv1
+        except:
+            pass
+        
+        # Set connection timeout
+        socket.setdefaulttimeout(30)
         
         imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, ssl_context=context)
-        imap.login(EMAIL_USER, EMAIL_PASS)
+        
+        # Enhanced login with better error handling
+        try:
+            imap.login(EMAIL_USER, EMAIL_PASS)
+        except imaplib.IMAP4.error as e:
+            if "authentication failed" in str(e).lower():
+                logging.error("IMAP authentication failed. Check credentials or enable app passwords.")
+            else:
+                logging.error(f"IMAP login error: {e}")
+            return []
+        
         imap.select("INBOX")
         
         try:
@@ -1037,6 +1359,7 @@ def imap_fetch_unseen(limit=10) -> List[email.message.Message]:
             
             ids = (high_ids + normal_ids)[:limit]
         except:
+            # Fallback for Exchange servers that don't support complex searches
             _, data = imap.search(None, "(UNSEEN)")
             ids = (data[0].split() if data and data[0] else [])[:limit]
         
@@ -1056,9 +1379,24 @@ def imap_fetch_unseen(limit=10) -> List[email.message.Message]:
         imap.logout()
         return messages
         
+    except socket.gaierror as e:
+        logging.error(f"DNS resolution failed for {IMAP_HOST}: {e}")
+        logging.error("This suggests your Exchange server hostname is incorrect.")
+        logging.error("Try checking your corporate Exchange server settings or contact IT support.")
+        return []
+    except socket.timeout:
+        logging.error(f"Connection timeout to {IMAP_HOST}:{IMAP_PORT}")
+        logging.error("This might indicate firewall blocking or incorrect server settings.")
+        return []
+    except ConnectionRefusedError:
+        logging.error(f"Connection refused by {IMAP_HOST}:{IMAP_PORT}")
+        logging.error("Check if the server is running and the port is correct.")
+        return []
     except Exception as e:
         logging.error(f"Corporate IMAP fetch error: {e}")
         return []
+    finally:
+        socket.setdefaulttimeout(None)
 
 def run_cycle():
     """Run one processing cycle (corporate enhanced)"""
@@ -1107,9 +1445,81 @@ def show_pending_review():
 # -----------------------
 # Corporate Health Check
 # -----------------------
+# def test_corporate_connections():
+#     """Test all corporate connections before starting"""
+#     print("Testing corporate connections...")
+    
+#     # Test SocGen AI API
+#     try:
+#         token = socgen_client.get_access_token()
+#         test_messages = [
+#             {"role": "system", "content": "You are a test assistant."},
+#             {"role": "user", "content": "Say 'Corporate AI connection successful'"}
+#         ]
+#         response = socgen_client.chat_completion(test_messages, max_tokens=50)
+#         print("✓ SocGen AI API: Connected")
+#     except Exception as e:
+#         print(f"✗ SocGen AI API: Failed - {e}")
+#         return False
+    
+#     # Test Corporate Email (IMAP)
+#     try:
+#         context = ssl.create_default_context()
+#         context.check_hostname = False
+#         context.verify_mode = ssl.CERT_NONE
+        
+#         imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, ssl_context=context)
+#         imap.login(EMAIL_USER, EMAIL_PASS)
+#         imap.select("INBOX")
+#         _, data = imap.search(None, "(ALL)")
+#         imap.close()
+#         imap.logout()
+#         print("✓ Corporate Outlook IMAP: Connected")
+#     except Exception as e:
+#         print(f"✗ Corporate Outlook IMAP: Failed - {e}")
+#         return False
+    
+#     # Test Corporate Email (SMTP)
+#     try:
+#         context = ssl.create_default_context()
+#         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+#             if SMTP_STARTTLS:
+#                 s.starttls(context=context)
+#             s.login(EMAIL_USER, EMAIL_PASS)
+#         print("✓ Corporate Outlook SMTP: Connected")
+#     except Exception as e:
+#         print(f"✗ Corporate Outlook SMTP: Failed - {e}")
+#         return False
+    
+#     print("All corporate connections successful!")
+#     return True
+
+
 def test_corporate_connections():
-    """Test all corporate connections before starting"""
+    """Enhanced connection testing with auto-discovery"""
     print("Testing corporate connections...")
+    
+    global IMAP_HOST, IMAP_PORT, SMTP_HOST, SMTP_PORT
+    
+    # Auto-discover if needed
+    if IMAP_HOST == "outlook.office365.com" and EMAIL_ADDRESS:
+        print("Attempting to discover corporate Exchange settings...")
+        discovered = discover_corporate_settings(EMAIL_ADDRESS)
+        if discovered['imap_host']:
+            IMAP_HOST = discovered['imap_host']
+            IMAP_PORT = discovered['imap_port']
+            if discovered['smtp_host']:
+                SMTP_HOST = discovered['smtp_host']
+                SMTP_PORT = discovered['smtp_port']
+            print(f"Discovered: IMAP={IMAP_HOST}:{IMAP_PORT}, SMTP={SMTP_HOST}:{SMTP_PORT}")
+        else:
+            print("Auto-discovery failed. Please configure server settings manually.")
+            print("Common corporate patterns to try:")
+            domain = EMAIL_ADDRESS.split('@')[1] if '@' in EMAIL_ADDRESS else ""
+            print(f"  - mail.{domain}")
+            print(f"  - exchange.{domain}")
+            print(f"  - imap.{domain}")
+            return False
     
     # Test SocGen AI API
     try:
@@ -1124,33 +1534,18 @@ def test_corporate_connections():
         print(f"✗ SocGen AI API: Failed - {e}")
         return False
     
-    # Test Corporate Email (IMAP)
-    try:
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        
-        imap = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, ssl_context=context)
-        imap.login(EMAIL_USER, EMAIL_PASS)
-        imap.select("INBOX")
-        _, data = imap.search(None, "(ALL)")
-        imap.close()
-        imap.logout()
-        print("✓ Corporate Outlook IMAP: Connected")
-    except Exception as e:
-        print(f"✗ Corporate Outlook IMAP: Failed - {e}")
+    # Test Corporate IMAP
+    if test_imap_connection(IMAP_HOST, IMAP_PORT, EMAIL_USER, EMAIL_PASS):
+        print(f"✓ Corporate Exchange IMAP: Connected ({IMAP_HOST}:{IMAP_PORT})")
+    else:
+        print(f"✗ Corporate Exchange IMAP: Failed ({IMAP_HOST}:{IMAP_PORT})")
         return False
     
-    # Test Corporate Email (SMTP)
-    try:
-        context = ssl.create_default_context()
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-            if SMTP_STARTTLS:
-                s.starttls(context=context)
-            s.login(EMAIL_USER, EMAIL_PASS)
-        print("✓ Corporate Outlook SMTP: Connected")
-    except Exception as e:
-        print(f"✗ Corporate Outlook SMTP: Failed - {e}")
+    # Test Corporate SMTP
+    if test_smtp_connection(SMTP_HOST, SMTP_PORT, EMAIL_USER, EMAIL_PASS):
+        print(f"✓ Corporate Exchange SMTP: Connected ({SMTP_HOST}:{SMTP_PORT})")
+    else:
+        print(f"✗ Corporate Exchange SMTP: Failed ({SMTP_HOST}:{SMTP_PORT})")
         return False
     
     print("All corporate connections successful!")
@@ -1184,5 +1579,4 @@ if __name__ == "__main__":
         save_state()
     except Exception as e:
         logging.error("Corporate agent crashed: %s", e)
-
         save_state()
